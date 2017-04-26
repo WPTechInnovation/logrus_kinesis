@@ -4,10 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/kinesis"
+	"github.com/Sirupsen/logrus"
 )
 
 var defaultLevels = []logrus.Level{
@@ -18,10 +17,14 @@ var defaultLevels = []logrus.Level{
 	logrus.InfoLevel,
 }
 
+// HookWriter defines common functionality for writing data from hook to destination
+type HookWriter interface {
+	Write(entry *logrus.Entry) error
+}
+
 // KinesisHook is logrus hook for AWS kinesis.
 type KinesisHook struct {
-	client *kinesis.Kinesis
-
+	client              HookWriter
 	defaultStreamName   string
 	defaultPartitionKey string
 	async               bool
@@ -32,35 +35,59 @@ type KinesisHook struct {
 
 // New returns initialized logrus hook for fluentd with persistent fluentd logger.
 func New(name string, conf Config) (*KinesisHook, error) {
-	sess, err := session.NewSession(conf.AWSConfig())
-	if err != nil {
-		return nil, err
-	}
 
-	svc := kinesis.New(sess)
-	return &KinesisHook{
-		client:            svc,
-		defaultStreamName: name,
-		levels:            defaultLevels,
-		ignoreFields:      make(map[string]struct{}),
-		filters:           make(map[string]func(interface{}) interface{}),
-	}, nil
+	return new(name, conf.AWSConfig(), &conf)
 }
 
-// NewWithConfig returns initialized logrus hook for fluentd with persistent fluentd logger.
-func NewWithAWSConfig(name string, conf *aws.Config) (*KinesisHook, error) {
-	sess, err := session.NewSession(conf)
+// NewWithAWSConfig returns initialized logrus hook for fluentd with persistent fluentd logger.
+func NewWithAWSConfig(name string, awsConf *aws.Config) (*KinesisHook, error) {
+
+	// StreamMode is default in order to maintain backward compatibility // TODO needs testing
+	conf := &Config{}
+	conf.KinesisMode = StreamMode
+
+	return new(name, awsConf, conf)
+}
+
+// Generalised constructor - both the New and NewWithConfig call this - this function is
+// code deduplication effort
+func new(name string, awsConf *aws.Config, conf *Config) (*KinesisHook, error) {
+
+	result := &KinesisHook{}
+
+	awsSession, err := session.NewSession(awsConf)
 	if err != nil {
 		return nil, err
 	}
 
-	svc := kinesis.New(sess)
-	return &KinesisHook{
-		client:       svc,
-		levels:       defaultLevels,
-		ignoreFields: make(map[string]struct{}),
-		filters:      make(map[string]func(interface{}) interface{}),
-	}, nil
+	var hook HookWriter
+
+	switch conf.KinesisMode {
+
+	case FirehoseMode:
+		hookFH, errFH := NewFirehoseHook(conf, awsSession, result)
+		hook = hookFH
+		err = errFH
+	case StreamMode:
+		hookSH, errSH := NewStreamHook(conf, awsSession, result)
+		hook = hookSH
+		err = errSH
+	default:
+		return nil, fmt.Errorf("Unsupported KinesisMode: %d", conf.KinesisMode)
+	}
+
+	if err != nil {
+
+		return nil, err
+	}
+
+	result.client = hook
+	result.defaultStreamName = name
+	result.levels = defaultLevels
+	result.ignoreFields = make(map[string]struct{})
+	result.filters = make(map[string]func(interface{}) interface{})
+
+	return result, nil
 }
 
 // Levels returns logging level to fire this hook.
@@ -107,13 +134,7 @@ func (h *KinesisHook) Fire(entry *logrus.Entry) error {
 
 // Fire is invoked by logrus and sends log to kinesis.
 func (h *KinesisHook) fire(entry *logrus.Entry) error {
-	in := &kinesis.PutRecordInput{
-		StreamName:   stringPtr(h.getStreamName(entry)),
-		PartitionKey: stringPtr(h.getPartitionKey(entry)),
-		Data:         h.getData(entry),
-	}
-	_, err := h.client.PutRecord(in)
-	return err
+	return h.client.Write(entry)
 }
 
 func (h *KinesisHook) getStreamName(entry *logrus.Entry) string {

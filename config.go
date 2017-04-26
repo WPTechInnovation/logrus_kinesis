@@ -9,12 +9,26 @@ import (
 
 const defaultRegion = "us-east-1"
 
+// KinesisMode type
+type KinesisMode uint8
+
+// These are the supported AWS Kinesis modes. You can specify the mode you wish to use
+// in `Config`
+const (
+	// FirehoseMode means delivering logs to a Firehose delivery stream
+	FirehoseMode KinesisMode = iota
+	// StreamMode means delivering logs to a Kinesis Stream to be picked up by
+	// another application
+	StreamMode
+)
+
 // Config has AWS settings.
 type Config struct {
-	AccessKey string
-	SecretKey string
-	Region    string
-	Endpoint  string
+	AccessKey   string
+	SecretKey   string
+	Region      string
+	Endpoint    string
+	KinesisMode KinesisMode
 }
 
 // AWSConfig creates *aws.Config object from the fields.
