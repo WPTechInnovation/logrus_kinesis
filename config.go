@@ -3,6 +3,7 @@ package logrus_kinesis
 import (
 	"os"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 )
@@ -29,6 +30,7 @@ type Config struct {
 	Region      string
 	Endpoint    string
 	KinesisMode KinesisMode
+	Formatter   logrus.Formatter
 }
 
 // AWSConfig creates *aws.Config object from the fields.
