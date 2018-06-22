@@ -3,9 +3,9 @@ package logrus_kinesis
 import (
 	"os"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/sirupsen/logrus"
 )
 
 const defaultRegion = "us-east-1"

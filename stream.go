@@ -3,9 +3,9 @@ package logrus_kinesis
 import (
 	"errors"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/kinesis"
+	"github.com/sirupsen/logrus"
 )
 
 // StreamWriter is an implementation of `HookWriter` for sending logs to
